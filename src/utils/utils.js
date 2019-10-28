@@ -1,20 +1,6 @@
-require('dotenv').config();
 const io = require('socket.io-client');
 const { getToken } = require('./token');
 
-async function init(payload) {
-
-  const data = await loginToServer(payload);
-  const organizationSocket = await connectToOrganizationNamespace(data.namespace, data.accessToken);
-
-  organizationSocket.on('enterNamespace', msg => console.log(msg));
-  organizationSocket.emit('joinRoom', { targetRoom:  data.room /* 'employee' */, accessToken: data.accessToken });
-  organizationSocket.on('success', msg => console.log(msg));
-  organizationSocket.on('managerOnline', msg => console.log(msg))
-
-}
-
-/********* FUNCTIONS  ***********/
 function loginToServer(payload) {
   return new Promise(async (resolve, reject) => {
     const token = await getToken(payload, process.env.SECRET, { tokenLife: process.env.TOKEN_LIFE });
@@ -32,4 +18,4 @@ function connectToOrganizationNamespace(namespace, accessToken) {
   })
 }
 
-process.on('message', init);
+module.exports = { loginToServer, connectToOrganizationNamespace };

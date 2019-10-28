@@ -1,7 +1,7 @@
 require('dotenv').config();
 const http = require('http').createServer();
 const io = require('socket.io')(http);
-const { decodeToken, getToken } = require('./token');
+const { decodeToken, getToken } = require('./utils/token');
 const port = 3000;
 
 // TODO: this need to be unique array
