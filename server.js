@@ -8,6 +8,24 @@ const port = 3000;
 const availableNamespaces = [];
 const availableRooms = ['employee', 'manager'];
 
+/***** LOGIN ******/
+io
+  .of('/login')
+  .on('connection', async socket => {
+    const { token } = socket.handshake.query;
+    const { organizationId, type } = await decodeToken(token, process.env.SECRET);
+
+    availableNamespaces.push(organizationId);
+    const payload = {
+      socketId: socket.conn.id,
+      room: type,
+      namespace: organizationId
+    };
+    const accessToken = await  getToken(payload, process.env.SECRET, { tokenLife: process.env.TOKEN_LIFE });
+
+    socket.emit('successfullyLogin', { namespace: organizationId, room: type, accessToken })
+  });
+
 /***** NAMESPACE ******/
 // TODO: make regular expression better
 io
@@ -45,24 +63,6 @@ io
         console.log('you dont have permission to access this room')
       }
     })
-  });
-
-/***** LOGIN ******/
-io
-  .of('/login')
-  .on('connection', async socket => {
-    const { token } = socket.handshake.query;
-    const { organizationId, type } = await decodeToken(token, process.env.SECRET);
-
-    availableNamespaces.push(organizationId);
-    const payload = {
-      socketId: socket.conn.id,
-      room: type,
-      namespace: organizationId
-    };
-    const accessToken = await  getToken(payload, process.env.SECRET, { tokenLife: process.env.TOKEN_LIFE });
-
-    socket.emit('successfullyLogin', { namespace: organizationId, room: type, accessToken })
   });
 
 http.listen(port, () => console.log(`server is listening on port: ${ port }`));
