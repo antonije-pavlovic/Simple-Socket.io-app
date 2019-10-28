@@ -1,69 +1,68 @@
+require('dotenv').config();
 const http = require('http').createServer();
 const io = require('socket.io')(http);
-const url = require('url');
+const { decodeToken, getToken } = require('./token');
 const port = 3000;
 
-let namespaces = [];
-let targetNamespace;
-io.on('connection', socket => {
-  if(socket.handshake.query.namespace) {
-    console.log(socket);
-    targetNamespace = socket.handshake.query.namespace;
-    console.log('tager namespace: ' + targetNamespace);
+// TODO: this need to be unique array
+const availableNamespaces = [];
+const availableRooms = ['employee', 'manager'];
 
-    if(namespaces && namespaces.includes(targetNamespace)) {
-      io
-        .of('/' + targetNamespace)
-        .on('connection', socket => {
-          console.log('dosao');
-          socket.emit('enterNamespace', 'welcome to your organization')
-        })
+/***** NAMESPACE ******/
+// TODO: make regular expression better
+io
+  .of(/^\/namespace\/.+$/)
+  .use(async (socket, next) => {
+
+    const targetNamespace = socket.nsp.name;
+    const { accessToken } = socket.handshake.query;
+    const { socketId, namespace, room } = await decodeToken(accessToken, process.env.SECRET);
+    socket.meta.room = room
+    if(namespace !== targetNamespace && socketId !== socket.conn.id) {
+      console.log('you dont have permission to access this namespace');
+      socket.disconnect()
+    }else {
+      console.log('middleware running...');
+      next()
     }
-  }
-});
-
-io
-  .of('/login')
+  })
   .on('connection', socket => {
-    // TODO: varify token and get parameters
-    // TODO: if everything is ok emit success, if it's not emit error
-    const { organizationId, userId, type } = socket.handshake.query;
-    namespaces.push(organizationId);
-    socket.emit('successfullyLogin', { namespace: organizationId, room: type })
-  });
-
-
-
-
-/*
-io.on('connection', socket => {
-  console.log('new client connected');
-  socket.emit('welcome', 'Hello there and welcome to socket io server')
-
-});
-
-const chatRooms = ['lol', 'wow', 'csgo'];
-io
-  .of('/games')
-  .on('connection', socket => {
-
-    socket.emit('welcome', 'Hello and welcome to games namespace');
-
-    socket.on('joinroom', room => {
-      // TODO: if there is no room socketIO will make room
-      if(chatRooms.includes(room)){
-        socket.join(room);
-        io
-          .of('/games') // TODO: specify to which group to emit
-          .in(room) // TODO: in because testing, in other cases use to
-          .emit('newUser', `New player has joined the ${ room }`);
+    const nsp = socket.nsp.name;
+    socket.emit('enterNamespace', 'Welcome to your organization');
+    socket.on('joinRoom', async data => {
+      const { room } = await decodeToken(data.accessToken, process.env.SECRET);
+      if(availableRooms.includes(data.targetRoom) && data.targetRoom === room) {
+        socket.join(data.targetRoom);
+        if(data.targetRoom === 'manager') {
+          io
+            .of(nsp)
+            .to('employee')
+            .emit('managerOnline', `Manager is online`);
+        }
         socket.emit('success', 'you have successfully joined this room')
-    } else {
-        socket.emit('error', `No room named ${ room }`)
+      }else {
+        socket.disconnect();
+        console.log('you dont have permission to access this room')
       }
-    socket.disconnect();
     })
   });
 
- */
+/***** LOGIN ******/
+io
+  .of('/login')
+  .on('connection', async socket => {
+    const { token } = socket.handshake.query;
+    const { organizationId, type } = await decodeToken(token, process.env.SECRET);
+
+    availableNamespaces.push(organizationId);
+    const payload = {
+      socketId: socket.conn.id,
+      room: type,
+      namespace: organizationId
+    };
+    const accessToken = await  getToken(payload, process.env.SECRET, { tokenLife: process.env.TOKEN_LIFE });
+
+    socket.emit('successfullyLogin', { namespace: organizationId, room: type, accessToken })
+  });
+
 http.listen(port, () => console.log(`server is listening on port: ${ port }`));
